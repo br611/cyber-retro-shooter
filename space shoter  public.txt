@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyber Shooter // Enterprise Blastar</title>
+    <style>
+        :root {
+            --bg-dark: #050811;
+            --neon-cyan: #00f3ff;
+            --neon-magenta: #ff007f;
+            --glass-panel: rgba(10, 18, 36, 0.75);
+        }
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background-color: var(--bg-dark);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        #game-wrapper {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            border: 2px solid rgba(0, 243, 255, 0.25);
+            border-radius: 16px;
+            box-shadow: 0 0 40px rgba(0, 243, 255, 0.15), inset 0 0 20px rgba(0, 243, 255, 0.05);
+            background: black;
+        }
+        canvas {
+            display: block;
+            border-radius: 14px;
+        }
+        .screen-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(5, 8, 17, 0.85);
+            backdrop-filter: blur(12px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            border-radius: 14px;
+            transition: opacity 0.3s ease;
+        }
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        h1 {
+            font-size: 48px;
+            font-weight: 900;
+            letter-spacing: 4px;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #ffffff, var(--neon-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 20px rgba(0, 243, 255, 0.3);
+        }
+        p {
+            color: #7e8da2;
+            font-size: 16px;
+            margin-bottom: 30px;
+            letter-spacing: 1px;
+        }
+        .btn-launch {
+            background: linear-gradient(135deg, var(--neon-cyan) 0%, #0077ff 100%);
+            color: #050811;
+            border: none;
+            padding: 14px 40px;
+            font-size: 16px;
+            font-weight: 700;
+            border-radius: 30px;
+            cursor: pointer;
+            letter-spacing: 1.5px;
+            box-shadow: 0 0 25px rgba(0, 243, 255, 0.4);
+            transition: all 0.2s ease;
+        }
+        .btn-launch:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 35px var(--neon-cyan);
+        }
+        .hud-display {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            font-weight: 700;
+            font-size: 18px;
+            letter-spacing: 1px;
+        }
+        .hud-label span {
+            color: var(--neon-cyan);
+            text-shadow: 0 0 8px var(--neon-cyan);
+        }
+        .hud-label.score span {
+            color: var(--neon-magenta);
+            text-shadow: 0 0 8px var(--neon-magenta);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="start-screen" class="screen-overlay">
+            <h1 id="theme-title">CYBER BLASTAR</h1>
+            <p id="theme-tagline">Neutralize system errors before they breach the firewall.</p>
+            <button class="btn-launch" id="btn-start">BOOT SYSTEMS</button>
+        </div>
+        <div id="gameover-screen" class="screen-overlay hidden">
+            <h1>CRITICAL BREACH</h1>
+            <p>The core firewall infrastructure was compromised.</p>
+            <button class="btn-launch" id="btn-restart">REBOOT FIRMWARE</button>
+        </div>
+        <div class="hud-display">
+            <div class="hud-label score">SCORE: <span id="ui-score">0</span></div>
+            <div class="hud-label">SHIELD: <span id="ui-shield">100%</span></div>
+        </div>
+    </div>
+
+    <script>
+        const ThemeConfig = {
+            title: "THREAT NEUTRALIZER",
+            tagline: "Destroy cybersecurity vulnerabilities instantly.",
+            playerColor: "#00f3ff",
+            enemyColor: "#ff007f",
+            laserColor: "#00ff66",
+            starSpeed: 2
+        };
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const SoundEngine = {
+            ctx: null,
+            init() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            },
+            playLaser() {
+                if (!this.ctx) return;
+                let osc = this.ctx.createOscillator();
+                let gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(150, this.ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.15);
+            },
+            playExplosion() {
+                if (!this.ctx) return;
+                let osc = this.ctx.createOscillator();
+                let gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(160, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(40, this.ctx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
+            }
+        };
+
+        let player = { x: 400, y: 520, width: 44, height: 36, shield: 100 };
+        let lasers = [];
+        let enemies = [];
+        let particles = [];
+        let stars = [];
+        let score = 0;
+        let isGameRunning = false;
+        let keys = {};
+        let enemyInterval = null;
+
+        for (let i = 0; i < 80; i++) {
+            stars.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 2,
+                speed: (Math.random() * 1.5 + 0.5) * ThemeConfig.starSpeed
+            });
+        }
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (e.code === 'Space' && isGameRunning) {
+                fireLaser();
+                e.preventDefault();
+            }
+        });
+        window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+        function fireLaser() {
+            lasers.push({ x: player.x, y: player.y - 15, w: 4, h: 15, speed: 8 });
+            SoundEngine.playLaser();
+        }
+
+        function spawnEnemyLoop() {
+            if (!isGameRunning) return;
+            enemies.push({
+                x: Math.random() * (canvas.width - 40) + 20,
+                y: -30,
+                w: 32,
+                h: 28,
+                speed: Math.random() * 2 + 1.5
+            });
+            let dynamicDelay = Math.max(400, 1200 - score * 2);
+            enemyInterval = setTimeout(spawnEnemyLoop, dynamicDelay);
+        }
+
+        function triggerExplosion(x, y, color) {
+            for (let i = 0; i < 15; i++) {
+                particles.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: (Math.random() - 0.5) * 6,
+                    size: Math.random() * 3 + 1,
+                    alpha: 1,
+                    color: color
+                });
+            }
+            SoundEngine.playExplosion();
+        }
+
+        function startSimulation() {
+            if (!SoundEngine.ctx) SoundEngine.init();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('gameover-screen').classList.add('hidden');
+            resetMetrics();
+            isGameRunning = true;
+            clearTimeout(enemyInterval);
+            spawnEnemyLoop();
+        }
+
+        function resetMetrics() {
+            score = 0;
+            player.shield = 100;
+            player.x = 400;
+            lasers = [];
+            enemies = [];
+            particles = [];
+            document.getElementById('ui-score').innerText = score;
+            document.getElementById('ui-shield').innerText = "100%";
+        }
+
+        function frameUpdate() {
+            ctx.fillStyle = '#02040a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            stars.forEach(star => {
+                star.y += star.speed;
+                if (star.y > canvas.height) star.y = 0;
+                ctx.fillRect(star.x, star.y, star.size, star.size);
+            });
+
+            if (isGameRunning) {
+                if (keys['ArrowLeft'] || keys['KeyA']) player.x = Math.max(30, player.x - 6);
+                if (keys['ArrowRight'] || keys['KeyD']) player.x = Math.min(canvas.width - 30, player.x + 6);
+
+                ctx.save();
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = ThemeConfig.playerColor;
